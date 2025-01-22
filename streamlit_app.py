@@ -178,29 +178,49 @@ if not st.session_state.user:
     tab1, tab2 = st.tabs(["Login", "Sign Up"])
     
     with tab1:
-        with st.form("login_form"):
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            if st.form_submit_button("Login"):
-                user = verify_user(username, password)
-                if user:
-                    st.session_state.user = user
-                    st.success("Logged in successfully!")
-                    st.rerun()
+        with st.form("login_form", clear_on_submit=True):
+            username = st.text_input("Username*", placeholder="Enter username")
+            password = st.text_input("Password*", type="password", placeholder="Enter password")
+            submitted = st.form_submit_button("Login", use_container_width=True)
+            
+            if submitted:
+                if not username or not password:
+                    st.error("⚠️ All fields are required!")
                 else:
-                    st.error("Invalid credentials")
+                    user = verify_user(username, password)
+                    if user:
+                        st.session_state.user = user
+                        st.success("Logged in successfully!")
+                        st.rerun()
+                    else:
+                        st.error("Invalid credentials")
     
     with tab2:
-        with st.form("signup_form"):
-            new_username = st.text_input("Username")
-            new_email = st.text_input("Email")
-            new_password = st.text_input("Password", type="password")
-            if st.form_submit_button("Sign Up"):
-                try:
-                    user_id = create_user(new_username, new_email, new_password)
-                    st.success("Account created! Please log in.")
-                except Exception as e:
-                    st.error(f"Failed to create account: {e}")
+        with st.form("signup_form", clear_on_submit=True):
+            new_username = st.text_input("Username*", placeholder="Choose a username")
+            new_email = st.text_input("Email*", placeholder="Enter your email")
+            new_password = st.text_input("Password*", type="password", placeholder="Choose a password")
+            submitted = st.form_submit_button("Sign Up", use_container_width=True)
+            
+            if submitted:
+                if not new_username or not new_email or not new_password:
+                    st.error("⚠️ All fields are required!")
+                elif len(new_password) < 6:
+                    st.error("⚠️ Password must be at least 6 characters long")
+                elif '@' not in new_email:
+                    st.error("⚠️ Please enter a valid email address")
+                else:
+                    try:
+                        user_id = create_user(new_username, new_email, new_password)
+                        st.success("✅ Account created! Please log in.")
+                    except Exception as e:
+                        if "duplicate key" in str(e):
+                            if "username" in str(e):
+                                st.error("Username already exists!")
+                            elif "email" in str(e):
+                                st.error("Email already registered!")
+                        else:
+                            st.error(f"Failed to create account: {e}")
 
 else:
     # After successful login, load notes
