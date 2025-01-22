@@ -100,30 +100,6 @@ def get_db_connection():
     return psycopg2.connect(**DB_CONFIG)
 
 # Database operations
-def init_db():
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            # Simple users table
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    id SERIAL PRIMARY KEY,
-                    username VARCHAR(50) UNIQUE NOT NULL,
-                    email VARCHAR(100) UNIQUE NOT NULL,
-                    password_hash TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            # Create notes table with user_id
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS notes (
-                    id SERIAL PRIMARY KEY,
-                    user_id INTEGER REFERENCES users(id),
-                    content TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-        conn.commit()
-
 # Add user management functions
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -181,6 +157,15 @@ def delete_note(note_id):
             cur.execute("DELETE FROM notes WHERE id = %s", (note_id,))
         conn.commit()
 
+# Add new function for account deletion
+def delete_user_account(user_id):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            # Delete all user's notes first due to foreign key constraint
+            cur.execute("DELETE FROM notes WHERE user_id = %s", (user_id,))
+            # Delete the user
+            cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
+        conn.commit()
 
 # Authentication UI
 if not st.session_state.user:
@@ -221,10 +206,27 @@ else:
         st.error(f"Failed to load notes: {e}")
         st.session_state.notes = []
 
-    # Show logout button
-    if st.sidebar.button("Logout"):
-        st.session_state.user = None
-        st.rerun()
+    # Show logout and delete account buttons
+    with st.sidebar:
+        st.write("Account Options")
+        if st.button("Logout"):
+            st.session_state.user = None
+            st.rerun()
+        
+        # Add dangerous action warning
+        st.write("---")
+        st.write("⚠️ Danger Zone")
+        if st.button("Delete Account", type="secondary", help="This will permanently delete your account and all notes"):
+            if st.popover("Are you sure?"):
+                if st.button("Yes, delete my account", type="primary"):
+                    try:
+                        delete_user_account(st.session_state.user['id'])
+                        st.session_state.user = None
+                        st.session_state.notes = []
+                        st.success("Account deleted successfully")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Failed to delete account: {e}")
 
     # Only show notes app when user is logged in
     st.header(f"📝 Notes - Welcome {st.session_state.user['username']}")
