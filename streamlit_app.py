@@ -157,15 +157,20 @@ def delete_note(note_id):
             cur.execute("DELETE FROM notes WHERE id = %s", (note_id,))
         conn.commit()
 
-# Add new function for account deletion
+# Modify the delete account function to be simpler and more reliable
 def delete_user_account(user_id):
     with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            # Delete all user's notes first due to foreign key constraint
-            cur.execute("DELETE FROM notes WHERE user_id = %s", (user_id,))
-            # Delete the user
-            cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
-        conn.commit()
+        try:
+            with conn.cursor() as cur:
+                # Delete all notes first
+                cur.execute("DELETE FROM notes WHERE user_id = %s", (user_id,))
+                # Then delete the user
+                cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
+                conn.commit()
+                return True
+        except Exception as e:
+            conn.rollback()
+            raise e
 
 # Authentication UI
 if not st.session_state.user:
@@ -213,44 +218,48 @@ else:
             st.session_state.user = None
             st.rerun()
         
-        # Add dangerous action warning
         st.write("---")
         st.write("⚠️ Danger Zone")
-        if st.button("Delete Account", type="secondary", help="This will permanently delete your account and all notes"):
-            if st.popover("Are you sure?"):
-                if st.button("Yes, delete my account", type="primary"):
+        delete_col1, delete_col2 = st.columns(2)
+        with delete_col1:
+            if st.button("Delete Account", type="secondary"):
+                st.session_state['show_delete_confirm'] = True
+        
+        if st.session_state.get('show_delete_confirm', False):
+            st.warning("Are you sure? This will delete all your notes!")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Yes, Delete"):
                     try:
-                        delete_user_account(st.session_state.user['id'])
-                        st.session_state.user = None
-                        st.session_state.notes = []
-                        st.success("Account deleted successfully")
-                        st.rerun()
+                        if delete_user_account(st.session_state.user['id']):
+                            st.session_state.user = None
+                            st.session_state.notes = []
+                            st.success("Account deleted")
+                            st.rerun()
                     except Exception as e:
                         st.error(f"Failed to delete account: {e}")
+            with col2:
+                if st.button("Cancel"):
+                    st.session_state['show_delete_confirm'] = False
+                    st.rerun()
 
     # Only show notes app when user is logged in
     st.header(f"📝 Notes - Welcome {st.session_state.user['username']}")
     
-    # Improved note input layout
+    # Improved note input layout with better save button placement
     st.markdown("### Create Note")
-    col1, col2 = st.columns([4, 1])
-    
-    with col1:
-        new_note = st.text_area("", height=100, placeholder="Write something...", label_visibility="collapsed")
-    
-    with col2:
-        st.markdown("#") # Add spacing to align button with textarea
-        if st.button("💾 Save", use_container_width=True, type="primary"):
-            if new_note.strip():
-                try:
-                    note_id = save_note(new_note, st.session_state.user['id'])
-                    st.session_state.notes = load_notes(st.session_state.user['id'])
-                    st.success("✓ Saved")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Failed to save note: {e}")
-            else:
-                st.warning("📝 Note is empty")
+    new_note = st.text_area("", height=100, placeholder="Write something...", label_visibility="collapsed")
+    if st.button("💾 Save", type="primary", use_container_width=True):
+        if new_note.strip():
+            try:
+                note_id = save_note(new_note, st.session_state.user['id'])
+                st.session_state.notes = load_notes(st.session_state.user['id'])
+                st.success("✓ Saved")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Failed to save note: {e}")
+        else:
+            st.warning("📝 Note is empty")
 
     # Improved notes display
     try:
