@@ -11,7 +11,6 @@ import random
 import smtplib
 from email.mime.text import MIMEText
 
-# Updated modern CSS
 st.markdown("""
 <style>
     /* Essential styles only */
@@ -81,10 +80,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Load environment variables
 load_dotenv()
 
-# Initialize session state for authentication first
 if 'user' not in st.session_state:
     st.session_state.user = None
 if 'notes' not in st.session_state:
@@ -92,7 +89,6 @@ if 'notes' not in st.session_state:
 if 'editing' not in st.session_state:
     st.session_state.editing = set()
 
-# Database connection configuration
 DB_CONFIG = {
     "user": os.getenv("user"),
     "password": os.getenv("password"),
@@ -104,8 +100,6 @@ DB_CONFIG = {
 def get_db_connection():
     return psycopg2.connect(**DB_CONFIG)
 
-# Database operations
-# Add user management functions
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -138,7 +132,6 @@ def verify_user_by_id(user_id, email):
             )
             return cur.fetchone()
 
-# Modify note functions to include user_id
 def load_notes(user_id):
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -171,14 +164,11 @@ def delete_note(note_id):
             cur.execute("DELETE FROM notes WHERE id = %s", (note_id,))
         conn.commit()
 
-# Modify the delete account function to be simpler and more reliable
 def delete_user_account(user_id):
     with get_db_connection() as conn:
         try:
             with conn.cursor() as cur:
-                # Delete all notes first
                 cur.execute("DELETE FROM notes WHERE user_id = %s", (user_id,))
-                # Then delete the user
                 cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
                 conn.commit()
                 return True
@@ -186,11 +176,9 @@ def delete_user_account(user_id):
             conn.rollback()
             raise e
 
-# Add helper function for space validation
 def contains_spaces(text):
     return ' ' in text
 
-# Add new function for password update
 def update_password(user_id, new_password):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -200,7 +188,6 @@ def update_password(user_id, new_password):
             )
         conn.commit()
 
-# Add new functions for profile updates
 def update_username(user_id, new_username):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -213,7 +200,6 @@ def update_username(user_id, new_username):
 def update_email(user_id, new_email):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            # Check if email exists
             cur.execute("SELECT id FROM users WHERE email = %s AND id != %s", (new_email, user_id))
             if cur.fetchone():
                 raise Exception("Email already exists")
@@ -223,7 +209,6 @@ def update_email(user_id, new_email):
             )
         conn.commit()
 
-# Add cookie management functions
 def set_auth_cookie():
     cookie = json.dumps({
         'user_id': st.session_state.user['id'],
@@ -240,7 +225,6 @@ def load_auth_cookie():
         cookie = st.query_params.get('auth')
         if cookie:
             data = json.loads(cookie)
-            # Verify if cookie data is valid
             user = verify_user_by_id(data['user_id'], data['email'])
             if user:
                 st.session_state.user = user
@@ -249,7 +233,6 @@ def load_auth_cookie():
         pass
     return False
 
-# Add new functions for password reset
 def generate_temp_password(length=12):
     chars = string.ascii_letters + string.digits
     return ''.join(random.choice(chars) for _ in range(length))
@@ -285,12 +268,10 @@ def send_password_reset_email(email, temp_password):
 def reset_user_password(email):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            # Verify email exists
             cur.execute("SELECT id FROM users WHERE email = %s", (email,))
             if not cur.fetchone():
                 raise Exception("Email not found")
             
-            # Generate and set temporary password
             temp_password = generate_temp_password()
             cur.execute(
                 "UPDATE users SET password_hash = %s WHERE email = %s",
@@ -299,9 +280,7 @@ def reset_user_password(email):
             conn.commit()
             return temp_password
 
-# Authentication UI
 if not st.session_state.user:
-    # Try to load from cookie first
     if load_auth_cookie():
         st.rerun()
     
@@ -333,7 +312,6 @@ if not st.session_state.user:
                     else:
                         st.error("Invalid email or password")
         
-        # Add forgot password section
         with st.expander("Forgot Password?"):
             with st.form("forgot_password_form"):
                 reset_email = st.text_input("Email", placeholder="Enter your email")
@@ -381,15 +359,13 @@ if not st.session_state.user:
                             st.error(f"Failed to create account: {e}")
 
 else:
-    # After successful login, load notes
     try:
-        if st.session_state.notes == []:  # Only load if notes are empty
+        if st.session_state.notes == []: 
             st.session_state.notes = load_notes(st.session_state.user['id'])
     except Exception as e:
         st.error(f"Failed to load notes: {e}")
         st.session_state.notes = []
 
-    # Show account options in sidebar
     with st.sidebar:
         st.write("Account Options")
         if st.button("Logout"):
@@ -397,11 +373,9 @@ else:
             st.session_state.user = None
             st.rerun()
         
-        # Add Profile Update Section
         st.write("---")
         st.write("👤 Update Profile")
         
-        # Username change form
         with st.form("change_username_form"):
             new_username = st.text_input("New Username", placeholder="Enter new username")
             if st.form_submit_button("Change Username"):
@@ -436,7 +410,6 @@ else:
                         else:
                             st.error(f"Failed to update email: {e}")
         
-        # Add Password Change Section
         st.write("---")
         st.write("🔐 Change Password")
         with st.form("change_password_form"):
@@ -454,7 +427,6 @@ else:
                 elif len(new_password) < 6:
                     st.error("⚠️ New password must be at least 6 characters long")
                 else:
-                    # Verify current password
                     user = verify_user(st.session_state.user['email'], current_password)
                     if user:
                         try:
@@ -465,7 +437,6 @@ else:
                     else:
                         st.error("⚠️ Current password is incorrect!")
         
-        # Danger Zone section
         st.write("---")
         st.write("⚠️ Danger Zone")
         delete_col1, delete_col2 = st.columns(2)
@@ -491,10 +462,8 @@ else:
                     st.session_state['show_delete_confirm'] = False
                     st.rerun()
 
-    # Only show notes app when user is logged in
     st.header(f"📝 Notes - Welcome {st.session_state.user['username']}")
     
-    # Improved note input layout with better save button placement
     st.markdown("### Create Note")
     new_note = st.text_area("", height=100, placeholder="Write something...", label_visibility="collapsed")
     if st.button("💾 Save", type="primary", use_container_width=True):
@@ -509,7 +478,6 @@ else:
         else:
             st.warning("📝 Note is empty")
 
-    # Improved notes display
     try:
         notes = load_notes(st.session_state.user['id'])
         if notes:
@@ -538,7 +506,7 @@ else:
                                 st.error(f"Failed to update note: {e}")
                     
                     with cols[1]:
-                        st.markdown("#")  # Spacing for alignment
+                        st.markdown("#") 
                         if is_editing:
                             if st.button("✓", key=f"edit_{idx}", use_container_width=True):
                                 st.session_state.editing.remove(idx)
@@ -549,7 +517,7 @@ else:
                                 st.rerun()
                     
                     with cols[2]:
-                        st.markdown("#")  # Spacing for alignment
+                        st.markdown("#")  
                         if st.button("🗑️", key=f"del_{idx}", use_container_width=True):
                             try:
                                 delete_note(note['id'])
